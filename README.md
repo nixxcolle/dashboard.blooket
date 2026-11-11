@@ -1,12 +1,12 @@
-# Countryside quiz race
-Open index.html in a modern browser, or preview it in Antigravity. No build required.
+# Horse vs. Car — 25-rock quiz race
+Open index.html in Antigravity or a modern browser. No build required.
 
-Load questions before choosing a ride. Import a Blooket-format CSV with Question Text, Answer 1, Answer 2 (and optionally Answer 3/4), and Correct Answer(s) columns. Correct answers use one-based answer numbers. Alternatively paste one question per line: Question | Correct answer | Wrong answer | Wrong answer.
+Each of 25 numbered rocks has one fixed question, using the 25 supplied questions in order. Both groups automatically approach rock 1 at the start and its question pops up. Horse buzzes with A; car with L. The teacher selects the group's answer on the shared screen.
 
-JSON format: [{"question":"Your question?","answers":["Correct","Incorrect"],"correct":[0]}]. JSON correct indexes are zero-based. Questions repeat if there are fewer than 22.
+A correct answer automatically moves only that group to its next rock. Arrival automatically flashes that rock's question. No Next question or Move click is needed. If the trailing group catches up to an already visited rock, that rock's fixed question appears again. A wrong answer gives the other group a chance. If both miss, click Retry this rock; neither racer moves. A correct answer at rock 25 moves the answering group across the finish line to win.
 
-Hold Space or the accelerator to race. B boosts; P pauses. At each of 22 rocks, the race clock and opponent pause. Choose the correct answer and click Continue racing. Incorrect answers allow retry. Three boosts per race. Best winning times are saved in browser storage.
+The course has 25 explicit numbered rock markers. Questions do not shuffle. The game is teacher-operated on one shared computer, with touch/click buzzers or A/L keyboard keys.
 
-The linked Blooket set could not be retrieved in this session. Its questions are not bundled; import or paste them before playing.
+The currency question assumes ₱63.20 per dollar (₱316 for $5), not a live quote. October 2026 inflation: 7.8%, per https://psa.gov.ph/content/summary-inflation-report-consumer-price-index-2018100-october-2026 .
 
-Verification: node --check game.js and node verify.cjs in the source workspace. Race logic checks cover all checkpoints, paused time/opponent, incorrect/correct answers, race completion, restart, and CSV parsing. Visual browser QA was unavailable.
+Checks: node --check game.js and node verify.cjs. Verified all 25 fixed question mappings, automatic arrival popup/movement, first buzzer lock, catch-up mapping, retry, finish, and reset cancellation. Browser visual QA unavailable.
