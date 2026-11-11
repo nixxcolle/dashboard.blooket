@@ -1,9 +1,21 @@
+(()=>{
 'use strict';
 const $ = id => document.getElementById(id);
-const route = $('route'), length = route.getTotalLength();
+const route = $('route');
+// Flatten the course once in JavaScript. Native SVG measurements on a hidden
+// race screen can fail or delay binding every button on the setup screen.
+function buildCourse(data){
+ const tokens=data.match(/[MLC]|-?\d+(?:\.\d+)?/g), points=[];let cursor=0,x=0,y=0,total=0;
+ function add(px,py){if(points.length)total+=Math.hypot(px-x,py-y);x=px;y=py;points.push({x,y,d:total});}
+ while(cursor<tokens.length){const command=tokens[cursor++];if(command==='M'||command==='L'){add(Number(tokens[cursor++]),Number(tokens[cursor++]));}else if(command==='C'){const x0=x,y0=y,x1=Number(tokens[cursor++]),y1=Number(tokens[cursor++]),x2=Number(tokens[cursor++]),y2=Number(tokens[cursor++]),x3=Number(tokens[cursor++]),y3=Number(tokens[cursor++]);for(let step=1;step<=40;step++){const t=step/40,u=1-t;add(u*u*u*x0+3*u*u*t*x1+3*u*t*t*x2+t*t*t*x3,u*u*u*y0+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y3);}}else throw Error('Unsupported course command');}
+ return {length:total,points};
+}
+const course=buildCourse(route.getAttribute('d')),length=course.length;
+function routePoint(distance){const points=course.points,target=Math.max(0,Math.min(length,distance));let low=0,high=points.length-1;while(low<high){const mid=(low+high)>>1;if(points[mid].d<target)low=mid+1;else high=mid;}const b=points[low],a=points[Math.max(0,low-1)],t=b.d===a.d?0:(target-a.d)/(b.d-a.d);return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};}
+
 const rocks = [[149,116],[186,161],[263,98],[331,71],[283,144],[398,139],[498,96],[557,160],[611,148],[650,188],[588,247],[638,333],[455,301],[373,328],[305,364],[225,299],[99,317],[46,245],[93,224],[197,231],[255,215],[466,202]];
 const stations = [0];
-for (const [x,y] of rocks) { let best = Infinity, nearest = 0; for (let d=1;d<length;d++) { const p=route.getPointAtLength(d), delta=Math.hypot(p.x-x,p.y-y); if(delta<best){best=delta;nearest=d;} } stations.push(nearest); }
+for (const [x,y] of rocks) { let best = Infinity, nearest = 0; for (let d=1;d<length;d++) { const p=routePoint(d), delta=Math.hypot(p.x-x,p.y-y); if(delta<best){best=delta;nearest=d;} } stations.push(nearest); }
 stations.sort((a,b)=>a-b);
 // Complete the route with 25 individually numbered question rocks.
 while(stations.length<26){let gap=0,index=0;for(let i=0;i<stations.length;i++){const end=i+1<stations.length?stations[i+1]:length;if(end-stations[i]>gap){gap=end-stations[i];index=i;}}stations.splice(index+1,0,stations[index]+gap/2);}
@@ -12,7 +24,7 @@ const questions = window.RACE_QUESTIONS;
 let teams, phase='setup', active=null, missed=new Set(), question, rockIndex=1, round=0, sound=false, audio, session=0;
 function shuffle(items){for(let i=items.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[items[i],items[j]]=[items[j],items[i]];}return items;}
 function tone(frequency=550){if(!sound)return;try{audio ||= new (window.AudioContext||window.webkitAudioContext)();audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.connect(g);g.connect(audio.destination);o.frequency.value=frequency;g.gain.setValueAtTime(.06,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.2);o.start();o.stop(audio.currentTime+.2);}catch{}}
-function place(team,distance){const p=route.getPointAtLength(distance),racer=$(team+'Racer');racer.style.left=`${p.x/752*100}%`;racer.style.top=`${(p.y+(team==='horse'?-5:6))/424*100}%`;}
+function place(team,distance){const p=routePoint(distance),racer=$(team+'Racer');racer.style.left=`${p.x/752*100}%`;racer.style.top=`${(p.y+(team==='horse'?-5:6))/424*100}%`;}
 function score(){for(const key of ['horse','car']){$(key+'Score').textContent=`${teams[key].name} · ${Math.min(teams[key].station,25)}/25`;} }
 function start(){session++;teams={horse:{name:$('horseName').value.trim()||'Group 1',station:0},car:{name:$('carName').value.trim()||'Group 2',station:0}};round=0;rockIndex=1;$('result').close();$('selection').hidden=true;$('race').hidden=false;$('raceTitle').textContent='The group race is on!';place('horse',0);place('car',0);score();hideQuestion();teams.horse.station=teams.car.station=1;place('horse',stations[1]);place('car',stations[1]);score();nextQuestion(1);}
 function nextQuestion(station=rockIndex){rockIndex=station;question=questions[rockIndex-1];round++;phase='buzz';active=null;missed.clear();$('roundNumber').textContent=rockIndex+' / 25';$('subject').textContent=question.subject+' · ROCK '+rockIndex+' · QUESTION '+rockIndex+' OF 25';$('questionTitle').textContent=question.question;$('move').hidden=true;$('next').hidden=true;$('status').textContent='Rock '+rockIndex+' reached! First group to buzz gets the first answer.';$('answerOptions').replaceChildren();question.answers.forEach((answer,index)=>{const button=document.createElement('button');button.textContent=String.fromCharCode(65+index)+'. '+answer;button.disabled=true;button.onclick=()=>answerQuestion(index);$('answerOptions').append(button);});document.querySelectorAll('.rock-marker').forEach((marker,i)=>marker.classList.toggle('current',i+1===rockIndex));updateBuzzers();showQuestion();}
@@ -27,11 +39,13 @@ function move(){if(phase!=='earned')return;phase='moving';hideQuestion();$('move
  function animate(now){if(session!==token||completed)return;if(began===null)began=now;const t=Math.min(1,(now-began)/900);place(team,from+(to-from)*(t*t*(3-2*t)));if(t<1)requestAnimationFrame(animate);else if(teams[team].station===stations.length-1){completed=true;phase='finished';$('raceTitle').textContent=teams[team].name+' wins!';$('resultTitle').textContent=teams[team].name+' wins!';$('resultText').textContent=`The ${team} reached the finish first after ${round} questions. Congratulations!`;$('result').showModal();tone(1000);}else{completed=true;nextQuestion(teams[team].station);}}
  requestAnimationFrame(animate);setTimeout(()=>{if(!completed&&session===token&&phase==='moving')animate((began??0)+1000);},1100);}
 function setup(){session++;phase='setup';hideQuestion();$('result').close();$('race').hidden=true;$('selection').hidden=false;}
-$('startGame').onclick=start;$('horseBuzz').onclick=()=>buzz('horse');$('carBuzz').onclick=()=>buzz('car');$('move').onclick=move;$('next').onclick=()=>{if(phase==='review')nextQuestion(rockIndex);};$('again').onclick=start;$('pick').onclick=setup;$('change').onclick=setup;
+$('startGame').onclick=start;document.querySelectorAll('[data-start-race]').forEach(button=>button.addEventListener('click',start));$('horseBuzz').onclick=()=>buzz('horse');$('carBuzz').onclick=()=>buzz('car');$('move').onclick=move;$('next').onclick=()=>{if(phase==='review')nextQuestion(rockIndex);};$('again').onclick=start;$('pick').onclick=setup;$('change').onclick=setup;
 $('result').addEventListener('cancel',event=>{event.preventDefault();setup();});
 window.addEventListener('keydown',event=>{if(event.repeat||event.ctrlKey||event.altKey||event.metaKey||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(phase==='buzz'&&(event.code==='KeyA'||event.code==='KeyL')){event.preventDefault();buzz(event.code==='KeyA'?'horse':'car');}});
 $('sound').onclick=()=>{sound=!sound;$('sound').textContent='Sound: '+(sound?'on':'off');$('sound').setAttribute('aria-pressed',String(sound));tone();};
 $('stationCount').textContent='25 rocks';$('questionInfo').textContent='25 numbered rocks = 25 fixed questions. Both racers start at rock 1. A correct answer automatically moves the answering group one station. On arrival, that rock’s question flashes automatically. If a group catches up, the question assigned to that rock appears again. Answer at rock 25 to move across the finish line.';
-for(let i=1;i<=25;i++){const p=route.getPointAtLength(stations[i]),marker=document.createElement('span');marker.className='rock-marker';marker.textContent=i;marker.style.left=(p.x/752*100)+'%';marker.style.top=(p.y/424*100)+'%';marker.title='Rock '+i+' · Question '+i;$('rockMarkers').append(marker);}
+for(let i=1;i<=25;i++){const p=routePoint(stations[i]),marker=document.createElement('span');marker.className='rock-marker';marker.textContent=i;marker.style.left=(p.x/752*100)+'%';marker.style.top=(p.y/424*100)+'%';marker.title='Rock '+i+' · Question '+i;$('rockMarkers').append(marker);}
 $('questionPopup').addEventListener('cancel',event=>event.preventDefault());
 
+
+})();
